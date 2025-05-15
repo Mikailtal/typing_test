@@ -34,7 +34,10 @@ if not room:
 
     if st.button("🎮 Create Game Room"):
         new_room = generate_room_code()
-        join_link = f"{st.request.host_url}?room={new_room}"
+        # Replace with your actual deployed Streamlit Cloud app URL:
+        BASE_URL = "https://your-app-name.streamlit.app"  
+        
+        join_link = f"{BASE_URL}?room={new_room}"
 
         # Store initial game room info
         st.session_state["game_rooms"][new_room] = {
