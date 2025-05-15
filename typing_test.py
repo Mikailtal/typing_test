@@ -2,157 +2,248 @@ import streamlit as st
 import time
 import random
 import string
+from datetime import datetime, timedelta
+import pandas as pd
+import pytz
 
-# Configure page
-st.set_page_config(page_title="Multiplayer Typing Game", layout="centered")
-
-# Temporary game room store (in memory)
-if "game_rooms" not in st.session_state:
-    st.session_state["game_rooms"] = {}
-
-# Sample sentences
-sentences = [
-    "The quick brown fox jumps over the lazy dog.",
-    "Typing fast and accurately is a valuable skill.",
-    "Streamlit makes it easy to build web apps in Python.",
-    "Practice every day to improve your typing speed.",
-    "Coding is best learned by doing real projects."
+# Sample texts for typing
+TEXTS = [
+    "The quick brown fox jumps over the lazy dog. Pack my box with five dozen liquor jugs. How vexingly quick daft zebras jump!",
+    "Python is an interpreted, high-level, general-purpose programming language. Created by Guido van Rossum and first released in 1991.",
+    "Streamlit is an open-source Python library that makes it easy to create and share beautiful, custom web apps for machine learning and data science.",
+    "To be or not to be, that is the question. Whether 'tis nobler in the mind to suffer the slings and arrows of outrageous fortune.",
+    "The greatest glory in living lies not in never falling, but in rising every time we fall. - Nelson Mandela"
 ]
 
-# Helper: generate room code
-def generate_room_code():
-    return ''.join(random.choices(string.ascii_uppercase + string.digits, k=5))
+# Initialize session state
+if 'page' not in st.session_state:
+    st.session_state.page = 'home'
+if 'player_name' not in st.session_state:
+    st.session_state.player_name = ''
+if 'room_id' not in st.session_state:
+    st.session_state.room_id = ''
+if 'room_creator' not in st.session_state:
+    st.session_state.room_creator = False
+if 'game_started' not in st.session_state:
+    st.session_state.game_started = False
+if 'game_over' not in st.session_state:
+    st.session_state.game_over = False
+if 'start_time' not in st.session_state:
+    st.session_state.start_time = None
+if 'end_time' not in st.session_state:
+    st.session_state.end_time = None
+if 'typed_text' not in st.session_state:
+    st.session_state.typed_text = ''
+if 'results' not in st.session_state:
+    st.session_state.results = {}
 
-# Read query parameters
-params = st.experimental_get_query_params()
-room = params.get("room", [None])[0]
+# Database simulation using session state
+if 'rooms' not in st.session_state:
+    st.session_state.rooms = {}
 
-# Home page (create a room)
-if not room:
-    st.title("🏠 Multiplayer Typing Game")
-    st.write("Create a room and share the link with a friend to start typing challenge!")
+def generate_room_id():
+    return ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
 
-    if st.button("🎮 Create Game Room"):
-        new_room = generate_room_code()
-        # Replace with your actual deployed Streamlit Cloud app URL:
-        BASE_URL = "https://your-app-name.streamlit.app"  
-        
-        join_link = f"{BASE_URL}?room={new_room}"
+def calculate_wpm(text, time_taken):
+    words = len(text.split())
+    minutes = time_taken / 60
+    return round(words / minutes, 2) if minutes > 0 else 0
 
-        # Store initial game room info
-        st.session_state["game_rooms"][new_room] = {
-            "players": {},
-            "started": False,
-            "sentence": random.choice(sentences),
-            "start_time": None,
-            "results": {}
-        }
+def calculate_accuracy(original, typed):
+    correct = 0
+    min_len = min(len(original), len(typed))
+    for i in range(min_len):
+        if original[i] == typed[i]:
+            correct += 1
+    return round(correct / len(original) * 100, 2) if original else 0
 
-        st.success("✅ Room Created!")
-        st.write("🔗 Share this link with your friend:")
-        st.code(join_link)
+def home_page():
+    st.title("🚀 Typing Speed Challenge")
+    st.write("Test your typing speed against friends in real-time!")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("Create New Room"):
+            st.session_state.page = 'enter_name'
+            st.session_state.room_creator = True
+    
+    with col2:
+        if st.button("Join Existing Room"):
+            st.session_state.page = 'enter_name'
+            st.session_state.room_creator = False
 
-        st.markdown(f"""
-        <input type="text" value="{join_link}" id="copyLink" style="width: 100%; padding: 8px;" readonly>
-        <button onclick="navigator.clipboard.writeText(document.getElementById('copyLink').value)" style="margin-top:10px;">📋 Copy to Clipboard</button>
-        """, unsafe_allow_html=True)
-
-        st.markdown(f"[📱 Share via WhatsApp](https://wa.me/?text=Join%20my%20typing%20game:%20{join_link})", unsafe_allow_html=True)
-        st.stop()
-
-    st.stop()
-
-# Game room logic
-st.title(f"Room Code: {room}")
-
-# Get or create room data
-room_data = st.session_state["game_rooms"].get(room, {
-    "players": {},
-    "started": False,
-    "sentence": random.choice(sentences),
-    "start_time": None,
-    "results": {}
-})
-
-# Get player name
-name = st.text_input("Enter your name:")
-if not name:
-    st.stop()
-
-# Register player
-if name not in room_data["players"]:
-    room_data["players"][name] = {"ready": False}
-
-# Show sentence to be typed
-sentence = room_data["sentence"]
-
-# Waiting for start
-if not room_data["started"]:
-    if not room_data["players"][name]["ready"]:
-        if st.button("✅ I'm ready"):
-            room_data["players"][name]["ready"] = True
-            st.session_state["game_rooms"][room] = room_data
-            st.rerun()
-
-    st.info("Waiting for both players to be ready...")
-
-    # If both players ready, start the game
-    if len(room_data["players"]) == 2 and all(p["ready"] for p in room_data["players"].values()):
-        room_data["started"] = True
-        room_data["start_time"] = time.time()
-        st.session_state["game_rooms"][room] = room_data
-        st.experimental_rerun()
-
-    st.stop()
-
-# Game has started
-start_time = room_data["start_time"]
-elapsed = int(time.time() - start_time)
-remaining = max(0, 60 - elapsed)
-
-st.success("🎯 Game Started!")
-st.info(f"⏳ Time remaining: {remaining} seconds")
-
-st.write("### Type this sentence:")
-st.code(sentence)
-
-typed_text = st.text_area("Type here:", height=100)
-
-# When time is up or player submits
-if remaining == 0 or st.button("📤 Submit"):
-    target_words = sentence.strip().split()
-    typed_words = typed_text.strip().split()
-
-    correct = sum(1 for t, u in zip(target_words, typed_words) if t == u)
-    accuracy = round((correct / len(target_words)) * 100 if target_words else 0, 2)
-    wpm = int(len(typed_words) / (max(1, elapsed) / 60))
-
-    # Save result
-    room_data["results"][name] = {
-        "wpm": wpm,
-        "accuracy": accuracy
-    }
-    st.session_state["game_rooms"][room] = room_data
-
-    st.success(f"✅ Your WPM: {wpm} | Accuracy: {accuracy}%")
-
-    # Wait for other player
-    if len(room_data["results"]) < 2:
-        st.info("Waiting for the other player to finish...")
-        st.stop()
-
-    # Show results
-    st.balloons()
-    st.header("🏁 Final Results")
-    for player, result in room_data["results"].items():
-        st.markdown(f"**{player}** → `WPM: {result['wpm']}`, `Accuracy: {result['accuracy']}%`")
-
-    # Decide winner
-    p1, p2 = list(room_data["results"].items())
-    if p1[1]["wpm"] > p2[1]["wpm"]:
-        st.markdown(f"🏆 **Winner:** {p1[0]}")
-    elif p2[1]["wpm"] > p1[1]["wpm"]:
-        st.markdown(f"🏆 **Winner:** {p2[0]}")
+def enter_name_page():
+    st.title("👤 Enter Your Name")
+    
+    st.session_state.player_name = st.text_input("Your Name:", max_chars=20)
+    
+    if st.session_state.room_creator:
+        if st.button("Create Room"):
+            if st.session_state.player_name:
+                room_id = generate_room_id()
+                st.session_state.room_id = room_id
+                st.session_state.rooms[room_id] = {
+                    'players': {st.session_state.player_name: {'ready': False, 'results': None}},
+                    'text': random.choice(TEXTS),
+                    'started': False,
+                    'game_over': False,
+                    'start_time': None,
+                    'end_time': None
+                }
+                st.session_state.page = 'room'
+            else:
+                st.warning("Please enter your name")
     else:
-        st.markdown("🤝 It's a tie!")
-    st.stop()
+        st.session_state.room_id = st.text_input("Room ID:", max_chars=6).upper()
+        if st.button("Join Room"):
+            if st.session_state.player_name and st.session_state.room_id:
+                if st.session_state.room_id in st.session_state.rooms:
+                    room = st.session_state.rooms[st.session_state.room_id]
+                    if st.session_state.player_name not in room['players']:
+                        room['players'][st.session_state.player_name] = {'ready': False, 'results': None}
+                        st.session_state.page = 'room'
+                    else:
+                        st.warning("Name already taken in this room")
+                else:
+                    st.warning("Room not found")
+            else:
+                st.warning("Please enter your name and room ID")
+
+def room_page():
+    room = st.session_state.rooms[st.session_state.room_id]
+    players = room['players']
+    
+    st.title(f"🏠 Room: {st.session_state.room_id}")
+    st.write(f"Player: {st.session_state.player_name}")
+    
+    # Display players and their ready status
+    st.subheader("Players:")
+    for player, data in players.items():
+        status = "✅ Ready" if data['ready'] else "❌ Not Ready"
+        st.write(f"- {player}: {status}")
+    
+    # Room link for sharing
+    if st.session_state.room_creator:
+        st.subheader("Invite Link:")
+        st.code(f"{st.get_option('browser.serverAddress')}/?room={st.session_state.room_id}")
+    
+    # Ready toggle
+    if not room['started'] and not room['game_over']:
+        if st.checkbox("I'm ready!", key='ready_checkbox'):
+            players[st.session_state.player_name]['ready'] = True
+        else:
+            players[st.session_state.player_name]['ready'] = False
+        
+        # Start game button (only for creator)
+        if st.session_state.room_creator:
+            all_ready = all(data['ready'] for data in players.values())
+            if all_ready and len(players) >= 1:
+                if st.button("Start Game!"):
+                    room['started'] = True
+                    room['start_time'] = datetime.now(pytz.utc) + timedelta(seconds=5)
+                    room['end_time'] = room['start_time'] + timedelta(minutes=1)
+            elif len(players) < 1:
+                st.warning("Waiting for more players to join...")
+            else:
+                st.warning("Waiting for all players to be ready...")
+    
+    # Game countdown and typing area
+    if room['started']:
+        now = datetime.now(pytz.utc)
+        
+        if now < room['start_time']:
+            # Countdown before game starts
+            seconds_left = int((room['start_time'] - now).total_seconds())
+            st.subheader(f"Game starts in: {seconds_left} seconds")
+            st.progress((5 - seconds_left) / 5)
+            
+            # Display the text to type
+            st.subheader("Text to type:")
+            st.write(room['text'])
+        elif now < room['end_time']:
+            # Game in progress
+            seconds_left = int((room['end_time'] - now).total_seconds())
+            st.subheader(f"Time left: {seconds_left} seconds")
+            st.progress(seconds_left / 60)
+            
+            # Typing area
+            st.subheader("Type the text below:")
+            st.write(room['text'])
+            
+            typed_text = st.text_area("Start typing here:", height=200, key='typing_area')
+            
+            # Calculate results if game is over for this player
+            if typed_text and len(typed_text.split()) >= 5:  # Minimum words to consider
+                players[st.session_state.player_name]['typed_text'] = typed_text
+                
+                # Calculate WPM and accuracy
+                time_taken = (datetime.now(pytz.utc) - room['start_time']).total_seconds()
+                wpm = calculate_wpm(typed_text, time_taken)
+                accuracy = calculate_accuracy(room['text'], typed_text)
+                
+                players[st.session_state.player_name]['results'] = {
+                    'wpm': wpm,
+                    'accuracy': accuracy,
+                    'time_taken': min(time_taken, 60)
+                }
+        else:
+            # Game over
+            room['game_over'] = True
+            st.session_state.game_over = True
+            
+            # Collect all results
+            results = []
+            for player, data in players.items():
+                if 'results' in data and data['results']:
+                    results.append({
+                        'Player': player,
+                        'WPM': data['results']['wpm'],
+                        'Accuracy': f"{data['results']['accuracy']}%",
+                        'Time Taken': f"{data['results']['time_taken']:.2f}s"
+                    })
+            
+            if results:
+                st.subheader("🏆 Game Results")
+                df = pd.DataFrame(results).sort_values('WPM', ascending=False)
+                st.dataframe(df.style.highlight_max(axis=0, color='lightgreen'))
+                
+                winner = df.iloc[0]['Player']
+                st.success(f"🎉 Winner: {winner} with {df.iloc[0]['WPM']} WPM!")
+            else:
+                st.warning("No results recorded")
+            
+            if st.button("Return to Home"):
+                # Clean up room if empty
+                if all(player == st.session_state.player_name for player in players.keys()):
+                    del st.session_state.rooms[st.session_state.room_id]
+                
+                st.session_state.page = 'home'
+                st.session_state.game_over = False
+                st.session_state.room_id = ''
+                st.session_state.player_name = ''
+                st.experimental_rerun()
+
+def main():
+    # Handle direct room links
+    query_params = st.experimental_get_query_params()
+    if 'room' in query_params and st.session_state.page == 'home':
+        st.session_state.room_id = query_params['room'][0].upper()
+        st.session_state.page = 'enter_name'
+        st.session_state.room_creator = False
+    
+    # Page routing
+    if st.session_state.page == 'home':
+        home_page()
+    elif st.session_state.page == 'enter_name':
+        enter_name_page()
+    elif st.session_state.page == 'room' and st.session_state.room_id in st.session_state.rooms:
+        room_page()
+    else:
+        st.warning("Invalid room or page state")
+        if st.button("Return to Home"):
+            st.session_state.page = 'home'
+            st.experimental_rerun()
+
+if __name__ == "__main__":
+    main()
