@@ -28,10 +28,35 @@ room = params.get("room", [None])[0]
 if not room:
     st.title("🏠 Welcome to the Multiplayer Typing Game!")
     if st.button("🎮 Create Game Room"):
-        room_code = generate_room_code()
-        st.experimental_set_query_params(room=room_code)
-        st.rerun()
+    new_room = generate_room_code()
+    join_link = f"{st.request.url}?room={new_room}"
+
+    # Store the new room temporarily
+    st.session_state["game_rooms"][new_room] = {
+        "players": {},
+        "started": False,
+        "sentence": random.choice(sentences),
+        "start_time": None,
+        "results": {}
+    }
+
+    st.experimental_set_query_params(room=new_room)
+
+    st.success("✅ Room Created!")
+    st.write("🔗 **Share this link with the second player:**")
+    st.code(join_link)
+
+    # Copy button (Streamlit only supports experimental workarounds)
+    st.markdown(f"""
+        <input type="text" value="{join_link}" id="copyLink" style="width: 100%; padding: 8px;" readonly>
+        <button onclick="navigator.clipboard.writeText(document.getElementById('copyLink').value)" style="margin-top:10px;">📋 Copy to Clipboard</button>
+        """, unsafe_allow_html=True)
+
+    # Optional: WhatsApp share
+    st.markdown(f"[📱 Share via WhatsApp](https://wa.me/?text=Join%20me%20in%20this%20typing%20game:%20{join_link})", unsafe_allow_html=True)
+    
     st.stop()
+
 
 st.title(f"Room: {room}")
 room_data = st.session_state["game_rooms"].get(room, {
