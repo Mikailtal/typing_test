@@ -70,7 +70,7 @@ else:
 
     if st.button("Join Game") and player_name and player_role:
         supabase.table("games").update({f"{player_role}_name": player_name}).eq("room_code", room_code).execute()
-        st.experimental_rerun()
+        st.rerun()
 
     game = get_game_data(room_code)
     if player_name not in [game.get("player1_name"), game.get("player2_name")]:
@@ -85,7 +85,7 @@ else:
     if not game.get(ready_key):
         if st.button("I'm Ready!"):
             supabase.table("games").update({ready_key: True}).eq("room_code", room_code).execute()
-            st.experimental_rerun()
+            st.rerun()
         st.info("Waiting for you to click ready.")
         st.stop()
 
