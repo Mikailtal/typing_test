@@ -1,3 +1,4 @@
 streamlit==1.22.0
 pandas==1.5.3
 pytz==2022.7
+supabase
