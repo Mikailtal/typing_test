@@ -42,7 +42,7 @@ if not room_code:
             "player1_name": name
         }).execute()
 
-        base_url = "https://typingtest-1.streamlit.app"  # Replace after deploying
+        base_url = "https://typingtest-1.streamlit.app/.streamlit.app"  # Replace after deploying
         join_link = f"{base_url}?room={room_code}"
         st.success("Room Created! Share this link:")
         st.code(join_link)
